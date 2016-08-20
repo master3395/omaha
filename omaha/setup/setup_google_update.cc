@@ -32,6 +32,7 @@
 #include "omaha/base/omaha_version.h"
 #include "omaha/base/path.h"
 #include "omaha/base/reg_key.h"
+#include "omaha/base/safe_format.h"
 #include "omaha/base/scoped_any.h"
 #include "omaha/base/service_utils.h"
 #include "omaha/base/utils.h"
@@ -42,7 +43,6 @@
 #include "omaha/common/config_manager.h"
 #include "omaha/common/const_cmd_line.h"
 #include "omaha/common/const_goopdate.h"
-#include "omaha/common/experiment_labels.h"
 #include "omaha/common/goopdate_utils.h"
 #include "omaha/common/scheduled_task_utils.h"
 #include "omaha/setup/setup_metrics.h"
@@ -123,37 +123,6 @@ HRESULT RegisterOrUnregisterService(bool reg, CString service_path) {
                                    COMMANDLINE_MODE_SERVICE_UNREGISTER);
   CString cmd_line = builder.GetCommandLineArgs();
   return RegisterOrUnregisterExe(service_path, cmd_line);
-}
-
-HRESULT SetB2173996ExperimentLabelIfNeeded(bool is_machine,
-                                           const CString& shell_path) {
-  if (is_machine || !::IsUserAnAdmin() || !vista_util::IsVistaOrLater()) {
-    return S_FALSE;
-  }
-
-  const ULONGLONG kShellVersion1_2_131_7 = 0x0001000200830007;
-
-  ULONGLONG shell_version = app_util::GetVersionFromFile(shell_path);
-  if (shell_version > kShellVersion1_2_131_7) {
-    return S_FALSE;
-  }
-
-  bool is_uac_on(false);
-  if (vista_util::IsVistaOrLater()) {
-    VERIFY1(SUCCEEDED(vista_util::IsUACOn(&is_uac_on)));
-  }
-
-  const TCHAR* const kLabelName = _T("B2173996");
-  CString label_value;
-  label_value.Format(_T("UAC%d"), is_uac_on);
-  const time64 kValidityPeriod =
-      static_cast<time64>(kSecsTo100ns) * kSecondsPerDay * 60;
-
-  ExperimentLabels labels;
-  VERIFY1(SUCCEEDED(labels.ReadFromRegistry(true, kGoogleUpdateAppId)));
-  time64 now = GetCurrent100NSTime();
-  labels.SetLabel(kLabelName, label_value, now + kValidityPeriod);
-  return labels.WriteToRegistry(true, kGoogleUpdateAppId);
 }
 
 }  // namespace
@@ -353,8 +322,6 @@ HRESULT SetupGoogleUpdate::InstallRegistryValues() {
     VERIFY1(SUCCEEDED(goopdate_utils::EnableSEHOP(true)));
   }
 
-  VERIFY1(SUCCEEDED(SetB2173996ExperimentLabelIfNeeded(is_machine_,
-                                                       shell_path)));
   return S_OK;
 }
 
@@ -553,7 +520,8 @@ HRESULT SetupGoogleUpdate::RegisterOrUnregisterCOMLocalServer(bool reg) {
   const CString google_update_path =
       goopdate_utils::BuildGoogleUpdateExePath(is_machine_);
   CString register_cmd;
-  register_cmd.Format(_T("/%s"), reg ? kCmdRegServer : kCmdUnregServer);
+  SafeCStringFormat(&register_cmd, _T("/%s"),
+                    reg ? kCmdRegServer : kCmdUnregServer);
   HRESULT hr = RegisterOrUnregisterExe(google_update_path, register_cmd);
   if (FAILED(hr)) {
     SETUP_LOG(LE, (_T("[RegisterOrUnregisterExe failed][0x%08x]"), hr));
@@ -587,8 +555,9 @@ HRESULT SetupGoogleUpdate::InstallMsiHelper() {
     // The product may already be installed. Force a reinstall of everything.
     SETUP_LOG(L3, (_T("[ERROR_PRODUCT_VERSION returned - forcing reinstall]")));
     CString force_install_cmd_line;
-    force_install_cmd_line.Format(_T("REINSTALL=ALL REINSTALLMODE=vamus %s"),
-                                  kMsiSuppressAllRebootsCmdLine);
+    SafeCStringFormat(&force_install_cmd_line,
+                      _T("REINSTALL=ALL REINSTALLMODE=vamus %s"),
+                      kMsiSuppressAllRebootsCmdLine);
     res = ::MsiInstallProduct(msi_path, force_install_cmd_line);
   }
 
@@ -619,8 +588,8 @@ HRESULT SetupGoogleUpdate::UninstallMsiHelper() {
   // command line to be used. Therefore, instead of using INSTALLSTATE_ABSENT
   // to uninstall, we must pass REMOVE=ALL in the command line.
   CString uninstall_cmd_line;
-  uninstall_cmd_line.Format(_T("REMOVE=ALL %s"),
-                            kMsiSuppressAllRebootsCmdLine);
+  SafeCStringFormat(&uninstall_cmd_line, _T("REMOVE=ALL %s"),
+                    kMsiSuppressAllRebootsCmdLine);
   UINT res = ::MsiConfigureProductEx(kHelperInstallerProductGuid,
                                      INSTALLLEVEL_DEFAULT,
                                      INSTALLSTATE_DEFAULT,

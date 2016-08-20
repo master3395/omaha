@@ -416,6 +416,7 @@ void GetAppLang(bool is_machine, const CString& app_id, CString* lang) {
 //    client
 //    iid
 //    experiment
+//    cohort
 // Reads InstallTime and computes InstallTimeDiffSec.
 void GetClientStateData(bool is_machine,
                         const CString& app_id,
@@ -426,6 +427,7 @@ void GetClientStateData(bool is_machine,
                         CString* client_id,
                         CString* iid,
                         CString* experiment_labels,
+                        Cohort* cohort,
                         int* install_time_diff_sec,
                         int* day_of_install) {
   RegKey key;
@@ -455,7 +457,11 @@ void GetClientStateData(bool is_machine,
     key.GetValue(kRegValueInstallationId, iid);
   }
   if (experiment_labels) {
-    key.GetValue(kRegValueExperimentLabels, experiment_labels);
+    *experiment_labels = ExperimentLabels::ReadFromRegistry(
+        is_machine, app_id, false);
+  }
+  if (cohort) {
+    ReadCohort(is_machine, app_id, cohort);
   }
   if (install_time_diff_sec) {
     *install_time_diff_sec = GetInstallTimeDiffSec(is_machine, app_id);
@@ -514,6 +520,66 @@ HRESULT GetDayOfInstall(
   return S_OK;
 }
 
+CString GetCohortKeyName(bool is_machine, const CString& app_id) {
+  const CString app_id_key_name(GetAppClientStateKey(is_machine, app_id));
+  return AppendRegKeyPath(app_id_key_name, kRegSubkeyCohort);
+}
+
+HRESULT DeleteCohortKey(bool is_machine, const CString& app_id) {
+  return RegKey::DeleteKey(GetCohortKeyName(is_machine, app_id));
+}
+
+HRESULT ReadCohort(bool is_machine, const CString& app_id, Cohort* cohort) {
+  CORE_LOG(L3, (_T("[ReadCohort][%s]"), app_id));
+  ASSERT1(cohort);
+
+  RegKey cohort_key;
+  HRESULT hr = cohort_key.Open(GetCohortKeyName(is_machine, app_id), KEY_READ);
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  hr = cohort_key.GetValue(NULL, &cohort->cohort);
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  // Optional values.
+  cohort_key.GetValue(kRegValueCohortHint, &cohort->hint);
+  cohort_key.GetValue(kRegValueCohortName, &cohort->name);
+
+  CORE_LOG(L3, (_T("[ReadCohort][%s][%s][%s]"), cohort->cohort,
+                                                cohort->hint,
+                                                cohort->name));
+  return S_OK;
+}
+
+HRESULT WriteCohort(bool is_machine,
+                    const CString& app_id,
+                    const Cohort& cohort) {
+  CORE_LOG(L3, (_T("[WriteCohort][%s]"), cohort.cohort));
+
+  if (cohort.cohort.IsEmpty()) {
+    return DeleteCohortKey(is_machine, app_id);
+  }
+
+  RegKey cohort_key;
+  HRESULT hr = cohort_key.Create(GetCohortKeyName(is_machine, app_id));
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  hr = cohort_key.SetValue(NULL, cohort.cohort);
+  if (FAILED(hr)) {
+    return hr;
+  }
+
+  VERIFY1(SUCCEEDED(cohort_key.SetValue(kRegValueCohortHint, cohort.hint)));
+  VERIFY1(SUCCEEDED(cohort_key.SetValue(kRegValueCohortName, cohort.name)));
+
+  return S_OK;
+}
+
 HRESULT GetUninstalledApps(bool is_machine,
                            std::vector<CString>* app_ids) {
   ASSERT1(app_ids);
@@ -564,43 +630,6 @@ void RemoveClientStateForApps(bool is_machine,
   for (it = apps.begin(); it != apps.end(); ++it) {
     RemoveClientState(is_machine, *it);
   }
-}
-
-HRESULT GetExperimentLabels(bool is_machine, const CString& app_id,
-                            CString* labels_out) {
-  ASSERT1(!app_id.IsEmpty());
-  ASSERT1(labels_out);
-
-  const CString state_key = GetAppClientStateKey(is_machine, app_id);
-  if (!RegKey::HasValue(state_key, kRegValueExperimentLabels)) {
-    return S_OK;
-  }
-
-  return RegKey::GetValue(state_key, kRegValueExperimentLabels, labels_out);
-}
-
-HRESULT GetExperimentLabelsMedium(const CString& app_id, CString* labels_out) {
-  ASSERT1(!app_id.IsEmpty());
-  ASSERT1(labels_out);
-
-  const bool kIsMachine = true;
-
-  const CString med_state_key = GetAppClientStateMediumKey(kIsMachine, app_id);
-  if (!RegKey::HasValue(med_state_key, kRegValueExperimentLabels)) {
-    return S_OK;
-  }
-
-  return RegKey::GetValue(med_state_key, kRegValueExperimentLabels, labels_out);
-}
-
-HRESULT SetExperimentLabels(bool is_machine, const CString& app_id,
-                            const CString& new_labels) {
-  ASSERT1(!app_id.IsEmpty());
-  ASSERT1(ExperimentLabels::IsStringValidLabelSet(new_labels));
-
-  return RegKey::SetValue(GetAppClientStateKey(is_machine, app_id),
-                          kRegValueExperimentLabels,
-                          new_labels);
 }
 
 HRESULT GetLastOSVersion(bool is_machine, OSVERSIONINFOEX* os_version_out) {

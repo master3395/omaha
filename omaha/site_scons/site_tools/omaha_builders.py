@@ -83,11 +83,11 @@ def SignDotNetManifest(env, target, unsigned_manifest):
   Returns:
     Output node list from env.Command().
   """
-  mage_sign_path = ('python $MAIN_DIR/tools/retry.py 10 5 %s/%s' %
+  mage_sign_path = ('python $MAIN_DIR/tools/retry.py 10 15 %s/%s' %
                     (os.getenv('OMAHA_NETFX_TOOLS_DIR'), 'mage.exe -Sign'))
   sign_manifest_cmd = (mage_sign_path +
                        ' $SOURCE -ToFile $TARGET -TimestampUri ' +
-                       'http://timestamp.verisign.com/scripts/timstamp.dll ')
+                       '$TIMESTAMP_SERVER ')
 
   if env.Bit('build_server'):
     # If signing fails with the following error, the hash may not match any
@@ -388,7 +388,11 @@ def ConfigureEnvFor64Bit(env):
                    LIBFLAGS=['/MACHINE:x64'],
                    LINKFLAGS=['/MACHINE:x64'])
 
-  _lib_paths = {
+  platform_sdk_version = env['WINDOWS_SDK_10_0_VERSION']
+  platform_sdk_lib_dir = ('$WINDOWS_SDK_10_0_DIR/lib/' +
+      '$WINDOWS_SDK_10_0_VERSION')
+
+  lib_paths = {
       omaha_version_utils.VC80: [ '$VC80_DIR/vc/lib/amd64',
                                   '$ATLMFC_VC80_DIR/lib/amd64',
                                   '$PLATFORM_SDK_VISTA_6_0_DIR/lib/x64' ],
@@ -400,11 +404,11 @@ def ConfigureEnvFor64Bit(env):
                                    '$WINDOWS_SDK_8_1_DIR/lib/winv6.3/um/x64' ],
       omaha_version_utils.VC140: [ '$VC14_0_DIR/vc/lib/amd64',
                                    '$ATLMFC_VC14_0_DIR/lib/amd64',
-                                   '$WINDOWS_SDK_10_LIB_DIR/um/x64',
-                                   '$WINDOWS_SDK_10_LIB_DIR/ucrt/x64',],
+                                   platform_sdk_lib_dir + '/um/x64',
+                                   platform_sdk_lib_dir + '/ucrt/x64',],
       }[env['msc_ver']]
 
-  env.Prepend(LIBPATH=_lib_paths)
+  env.Prepend(LIBPATH=lib_paths)
 
   # Override the build tools to be the x86-64 version.
   env.PrependENVPath('PATH', env.Dir(

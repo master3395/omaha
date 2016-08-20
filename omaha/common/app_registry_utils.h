@@ -28,6 +28,12 @@
 
 namespace omaha {
 
+struct Cohort {
+  CString cohort;  // Opaque string.
+  CString hint;    // Server may use to move the app to a new cohort.
+  CString name;    // Human-readable interpretation of the cohort.
+};
+
 namespace app_registry_utils {
 
 // Returns the application registration path for the specified app.
@@ -118,6 +124,7 @@ void GetClientStateData(bool is_machine,
                         CString* client_id,
                         CString* iid,
                         CString* experiment_labels,
+                        Cohort* cohort,
                         int* install_time_diff_sec,
                         int* day_of_install);
 
@@ -129,6 +136,13 @@ HRESULT GetDayOfInstall(bool is_machine,
                         const CString& app_id,
                         DWORD* day_of_install);
 
+CString GetCohortKeyName(bool is_machine, const CString& app_id);
+HRESULT DeleteCohortKey(bool is_machine, const CString& app_id);
+HRESULT ReadCohort(bool is_machine, const CString& app_id, Cohort* cohort);
+HRESULT WriteCohort(bool is_machine,
+                    const CString& app_id,
+                    const Cohort& cohort);
+
 // Reads all uninstalled apps from the registry.
 HRESULT GetUninstalledApps(bool is_machine, std::vector<CString>* app_ids);
 
@@ -138,18 +152,6 @@ HRESULT RemoveClientState(bool is_machine, const CString& app_guid);
 // Removes the client state for the apps.
 void RemoveClientStateForApps(bool is_machine,
                               const std::vector<CString>& apps);
-
-// Retrieves experiment labels for an app from the Registry.
-HRESULT GetExperimentLabels(bool is_machine, const CString& app_id,
-                            CString* labels_out);
-
-// On machine only, retrieves experiment labels for an app from the Registry
-// in the ClientStateMedium key.
-HRESULT GetExperimentLabelsMedium(const CString& app_id, CString* labels_out);
-
-// Overwrites the experiment labels for an app in the Registry.
-HRESULT SetExperimentLabels(bool is_machine, const CString& app_id,
-                            const CString& new_labels);
 
 // Retrieves the previously stored OS version from the Registry.
 HRESULT GetLastOSVersion(bool is_machine, OSVERSIONINFOEX* os_version_out);

@@ -1,18 +1,172 @@
+## 2016-07-21 @123807767,127906166 1.3.31.5
+
+--------------------------------------------------------------------------------
+Build changes for opensource: define shell var OMAHA_WINDOWS_SDK_10_0_VERSION
+--------------------------------------------------------------------------------
+SafeFormatTest.BrokenCStringFormatTruncates crashes and
+TimeTest.TimeToStringTest fails.
+Deleting SafeFormatTest.BrokenCStringFormatTruncates and
+disabling TimeTest.TimeToStringTest.
+--------------------------------------------------------------------------------
+Changes all CStringT Format/AppendFormat calls to use the safe versions
+SafeCStringFormat/AppendFormat.
+--------------------------------------------------------------------------------
+Change GPA_WRAP to use ::LoadLibrary instead of ::GetModuleHandle. The
+former is needed for cases where the module is not already loaded.
+--------------------------------------------------------------------------------
+Fix bug 29402553 Omaha metainstaller fails silently with Server Core for
+Windows Server 2012 R2. There are dependencies missing in Server Core for
+Windows Server 2012 R2. Server Core is a minimal server installation option for
+Windows Server that provides a low-maintenance server environment with limited
+functionality. I removed the rasapi32/rasman dependency, and the installer
+works on Server Core.
+--------------------------------------------------------------------------------
+The Model object is now created in the Worker constructor so that the
+locking/unlocking works correctly.
+--------------------------------------------------------------------------------
+Service not shutting down fast enough for a fallback local instance to install.
+This CL moves the Worker initialization (which includes the single instance
+mutex) to method calls on the IGoogleUpdate3 interface. In other words, the
+Worker is only initialized when the Client has a valid IGoogleUpdate3 interface
+pointer and calls a method on it. This change allows the client to reliably
+fall back to the in-proc COM server when the service takes too long to come
+up or if the interfaces are not registered correctly.
+--------------------------------------------------------------------------------
+Refactor parts of standalone_installer into plain python module.
+--------------------------------------------------------------------------------
+
+## 2016-06-01 @120560962,123807766
+
+### Changes
+--------------------------------------------------------------------------------
+Fix bug CertInfoTest.CertInfo fails. ExtractAllCertificatesFromSignature() gets
+the certificate chain for the first signature and the certificate chain for the
+corresponding timestamp. With the older SaveArguments.exe, the "Symantec Time
+Stamping Services Signer - G4" timestamp had 2 certificates in the certificate
+chain. With the newer SaveArguments.exe, the "COMODO SHA-1 Time Stamping Signer"
+has only a single certificate in the chain. So the total is off by 1.
+Fixing the total to be 3 now.
+
+The code we have in signaturevalidator.cc works for now.
+ExtractAllCertificatesFromSignature() only extracts the first signature in files
+with multiple digital signatures. It turns out that ::CryptQueryObject in
+conjunction with ::CertEnumCertificatesInStore on the returned HCERTSTORE only
+enumerates over the first signature (the SHA1 in this case). If we need to read
+subsequent signatures (the SHA256 for instance), we need to parse the
+unauthenticated attribute OID szOID_NESTED_SIGNATURE. For now, the code that
+we depend on works fine with the SHA1 signature, so I am only fixing the unit
+test.
+--------------------------------------------------------------------------------
+Bypass signing process for development build.
+--------------------------------------------------------------------------------
+Omaha fonts look bad on hi-dpi windows and fix Chromium Issue 612283 Installer
+text is blurry on Hi-DPI devices. Changing the manifest to specify that the
+Omaha UI is DPI-Aware. Tested with different DPI settings on Windows 8.1,
+the UI works well. More work may be needed on Windows 7, where the progress
+bar is not scaled appropriately.
+--------------------------------------------------------------------------------
+Fix ADMX generation for the UpdateDefault policy.
+Addressing crbug/609145.
+--------------------------------------------------------------------------------
+Add support for product downgrades to GoogleChromeStandaloneEnterprise.msi
+wrappers around standalone installers.
+
+Ordinarily, the MSI wrapper prevents product downgrades. This can be
+suppressed by passing ALLOWDOWNGRADE=1 (or any other value) via the
+command line to msiexec. This option can be propagated to app installers
+(mini_installer.exe) via a substitution of the [AllowDowngradeSubstitution]
+property in the app's ProductInstallerData. This property will be 'false'
+under normal circumstances, and 'true' when ALLOWDOWNGRADE=1
+is used.
+
+This feature is added in support of Chrome's enterprise installer; see
+http://crbug.com/607592.
+--------------------------------------------------------------------------------
+Fix bug 28297220 Experiment Label deltas not being saved correctly for machine
+ping requests.
+--------------------------------------------------------------------------------
+Update service spam to Event Log. Redefining the macro RegisterEventSource to
+evaluate to NULL so that ATL's logging code does nothing.
+Explicitly using ::RegisterEventSourceW in the Omaha codebase.
+--------------------------------------------------------------------------------
+Authenticode timestamping changes. Increasing the timeout between retries of
+signing a single file to 15 seconds as per Comodo's recommendations.
+--------------------------------------------------------------------------------
+Refactor Experiment Labels. This change reduces the public interface for
+experiment labels down to 4 functions. This makes the calling code less
+error-prone, more readable, and avoids duplicated functionality.
+
+## 2016-05-31 @113564071,120560961 1.3.30.3
+
+### Changes
+--------------------------------------------------------------------------------
+Allow persisting pings in background cases where the user token is a medium
+integrity token. We now persist pings at high integrity in the machine case.
+--------------------------------------------------------------------------------
+Add CUP key 6.
+--------------------------------------------------------------------------------
+Add Google Update configuration and statistics metrics. This change unifies
+the added metrics under a single key that also includes other Omaha metrics.
+--------------------------------------------------------------------------------
+Omaha Client Doesn't Stop Fallbacks on X-Retry-After. The client was trying
+(and failing) to save the RetryAfter value from medium integrity in the Machine
+Omaha case. Now we save it from high integrity.
+--------------------------------------------------------------------------------
+x-retry-after is obeyed even on http. The original HTTPS URL was being used
+instead of the actual HTTP URL. Changed variable names to better reflect what
+they represent.
+--------------------------------------------------------------------------------
+Add a <systemrequirements> element for the update <response>. The <systemrequirements>
+element is expected to be added only to offline update response files that ship
+with the standalone and msi installers.
+
+The <systemrequirements> element specifies the minimum requirements in terms of
+platform, arch, and version. For systems that do not meet the <systemrequirements>
+specifications, Omaha will error out with GOOPDATE_E_OS_NOT_SUPPORTED.
+The service pack is ignored at the moment.
+
+An example <systemrequirements> element is shown below:
+<response protocol="3.0"><systemrequirements platform="win" arch="x86" min_os_version="6.0"/>
+
+This sets the system requirements as Windows, x86 (or x64, since x64 systems support
+x86 applications), and a minimum OS version of 6.0.
+--------------------------------------------------------------------------------
+Retry-After should account for incorrect clock times. To account for clocks that
+get reset to the past, Omaha will retry now if the retry time is more than
+24 hours in the future.
+--------------------------------------------------------------------------------
+Omaha UI: Downloading text needs changes.
+--------------------------------------------------------------------------------
+Send cohort data with Omaha self-update pings as well as with exception/debug pings
+such as when Omaha could not install itself or CUP failure pings.
+--------------------------------------------------------------------------------
+Debug logging change.
+--------------------------------------------------------------------------------
+Reliable pings in Omaha. This feature makes all pings persisted objects. If for
+some reason Omaha is unable to transmit pings, the persisted pings are
+transmitted the next time the Omaha UA process runs.
+--------------------------------------------------------------------------------
+This change switches the ClickOnce single-sign timestamp servers to ComodoCA.
+This makes all the time stamp servers use ComodoCA.
+--------------------------------------------------------------------------------
+Integrate changes and delete unused code in base/security
+--------------------------------------------------------------------------------
+
 ## 2016-02-03 @109823444,113564071 1.3.29.5
 --------------------------------------------------------------------------------
 Change cacheable URL GPO reg value from "PayloadType" to "DownloadPreference".
--------------------------------------------------------------------------------- 
-Change to ::GetModuleHandle() instead of ::LoadLibrary() when getting a resource 
+--------------------------------------------------------------------------------
+Change to ::GetModuleHandle() instead of ::LoadLibrary() when getting a resource
 from goopdate.dll. The DLL is already loaded in memory, so LL is not needed.
 --------------------------------------------------------------------------------
-Mitigate DLL highjacking in the Omaha client. We now call ::SetDefaultDllDirectories 
-to retrict DLL loads to either full paths or %SYSTEM32%. ::SetDefaultDllDirectories 
-is available on Windows 8.1 and above, and on Windows Vista and above 
+Mitigate DLL highjacking in the Omaha client. We now call ::SetDefaultDllDirectories
+to retrict DLL loads to either full paths or %SYSTEM32%. ::SetDefaultDllDirectories
+is available on Windows 8.1 and above, and on Windows Vista and above
 when KB2533623 is applied.
--------------------------------------------------------------------------------- 
-Update the build files to use the new DualSignedBinary function. This function 
+--------------------------------------------------------------------------------
+Update the build files to use the new DualSignedBinary function. This function
 signs binaries with both SHA1 and SHA256 certificates.
--------------------------------------------------------------------------------- 
+--------------------------------------------------------------------------------
 
 ## 2015-12-09 @109823443,110222497 1.3.29.1
 --------------------------------------------------------------------------------

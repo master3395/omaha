@@ -192,43 +192,6 @@ HRESULT SetInstallationId(const CString& omaha_client_state_key_path,
   return S_OK;
 }
 
-// Persist experiment labels that are specific to Google Update itself during
-// an initial install.  These are specified in a tag using "omahaexperiments";
-// once it's on the machine, Google Update's experiment labels will be read
-// and modified like any other app on the system.
-HRESULT SetExperimentLabels(const CString& omaha_client_state_key_path,
-                            const CString& new_labels) {
-  if (new_labels.IsEmpty()) {
-    return S_FALSE;
-  }
-
-  if (!ExperimentLabels::IsStringValidLabelSet(new_labels)) {
-    OPT_LOG(LE, (_T("[New experiment labels are unparsable][%s]"), new_labels));
-    return E_INVALIDARG;
-  }
-
-  CString labels_to_write = new_labels;
-
-  // Do we have any existing values in the registry?
-  CString old_labels;
-  if (SUCCEEDED(RegKey::GetValue(omaha_client_state_key_path,
-                                 kRegValueExperimentLabels,
-                                 &old_labels))) {
-    if (!ExperimentLabels::MergeLabelSets(old_labels,
-                                          new_labels,
-                                          &labels_to_write)) {
-      // If we can't merge successfully, take the old labels.
-      CORE_LOG(LE, (_T("[MergeLabelSets() failed; using new labels only]")));
-      labels_to_write = new_labels;
-    }
-  }
-
-  // Write the merged (or new) label set to the registry.
-  return RegKey::SetValue(omaha_client_state_key_path,
-                          kRegValueExperimentLabels,
-                          labels_to_write);
-}
-
 void PersistUpdateErrorInfo(bool is_machine,
                             HRESULT error,
                             int extra_code1,
@@ -332,9 +295,8 @@ HRESULT InstallSelf(bool is_machine,
   // TODO(omaha): move SetInstallationId to app_registry_utils
   VERIFY1(SUCCEEDED(internal::SetInstallationId(omaha_client_state_key_path,
                                                 extra_args.installation_id)));
-  VERIFY1(SUCCEEDED(internal::SetExperimentLabels(
-      omaha_client_state_key_path,
-      extra_args.experiment_labels)));
+  VERIFY1(SUCCEEDED(ExperimentLabels::WriteToRegistry(
+      is_machine, kGoogleUpdateAppId, extra_args.experiment_labels)));
   VERIFY1(SUCCEEDED(app_registry_utils::SetGoogleUpdateBranding(
       omaha_client_state_key_path,
       extra_args.brand_code,
@@ -369,9 +331,9 @@ HRESULT InstallSelf(bool is_machine,
   install_ping.BuildOmahaPing(current_version,
                               next_version,
                               setup_install_complete_ping_event);
-  HRESULT send_result = install_ping.Send(true);
+  HRESULT send_result = SendReliablePing(&install_ping, true);
   if (FAILED(send_result)) {
-    CORE_LOG(LW, (_T("[InstallPing::Send failed][0x%x]"), send_result));
+    CORE_LOG(LW, (_T("[SendReliablePing failed][%#x]"), send_result));
   }
 
   return S_OK;
@@ -395,6 +357,9 @@ HRESULT UpdateSelf(bool is_machine, const CString& session_id) {
   } else {
     CORE_LOG(LE, (_T("[DoSelfUpdate failed][0x%08x]"), hr));
   }
+
+  metric_omaha_last_error_code = hr;
+  metric_omaha_last_extra_code = extra_code1;
 
   // If a self-update failed because an uninstall of that Omaha is in progress,
   // don't bother with an update failure ping; the uninstall ping will suffice.
@@ -421,7 +386,7 @@ HRESULT UpdateSelf(bool is_machine, const CString& session_id) {
   ping.BuildOmahaPing(current_version,
                       next_version,
                       update_complete_ping_event);
-  ping.Send(false);
+  SendReliablePing(&ping, false);
 
   return hr;
 }

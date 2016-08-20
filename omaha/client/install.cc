@@ -25,6 +25,7 @@
 #include "omaha/base/path.h"
 #include "omaha/base/process.h"
 #include "omaha/base/reg_key.h"
+#include "omaha/base/safe_format.h"
 #include "omaha/base/scoped_any.h"
 #include "omaha/base/string.h"
 #include "omaha/base/time.h"
@@ -243,7 +244,8 @@ HRESULT ElevateAndWait(const CString& cmd_line, DWORD* exit_code) {
   }
 
   CString cmd_line_elevated(GetCmdLineTail(cmd_line));
-  cmd_line_elevated.AppendFormat(_T(" /%s"), kCmdLineInstallElevated);
+  SafeCStringAppendFormat(&cmd_line_elevated, _T(" /%s"),
+                          kCmdLineInstallElevated);
 
   HRESULT hr = goopdate_utils::StartElevatedMetainstaller(cmd_line_elevated,
                                                           exit_code);
@@ -294,7 +296,7 @@ bool IsOfflineInstallForApp(const CString& app_id) {
   CString pattern;
 
   // Check if there are installer files named with the pattern "*.<app_id>".
-  pattern.Format(_T("*.%s"), app_id);
+  SafeCStringFormat(&pattern, _T("*.%s"), app_id);
   std::vector<CString> files;
   HRESULT hr = FindFiles(current_directory, pattern, &files);
   return SUCCEEDED(hr) && !files.empty();
@@ -371,7 +373,7 @@ HRESULT CopyOfflineFilesForApp(const CString& app_id,
   CString pattern;
   // Copy the installer files that are named with the pattern "*.<app_id>" to
   // the directory "<offline_dir>\<app_id>".
-  pattern.Format(_T("*.%s"), app_id);
+  SafeCStringFormat(&pattern, _T("*.%s"), app_id);
   std::vector<CString> files;
   HRESULT hr = FindFiles(setup_temp_dir, pattern, &files);
   if (FAILED(hr)) {
@@ -625,6 +627,7 @@ void HandleInstallError(HRESULT error,
   if (is_eula_required || is_oem_install || is_enterprise_install) {
     return;
   }
+
   Ping ping(is_machine, session_id, install_source);
   ping.LoadAppDataFromExtraArgs(extra_args);
   if (!has_setup_succeeded) {
@@ -646,9 +649,10 @@ void HandleInstallError(HRESULT error,
                       extra_code1));
     ping.BuildAppsPing(install_complete_ping_event);
   }
+
   HRESULT hr = ping.Send(false);
   if (FAILED(hr)) {
-    CORE_LOG(LW, (_T("[Ping::Send failed][0x%x]"), hr));
+    CORE_LOG(LW, (_T("[ping.Send failed][0x%x]"), hr));
   }
 }
 

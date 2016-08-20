@@ -19,6 +19,7 @@
 #include "base/basictypes.h"
 #include "omaha/base/constants.h"
 #include "omaha/base/error.h"
+#include "omaha/base/safe_format.h"
 #include "omaha/base/string.h"
 #include "omaha/base/utils.h"
 #include "omaha/base/xml_utils.h"
@@ -581,6 +582,37 @@ class DayStartElementHandler : public ElementHandler {
   }
 };
 
+// Parses 'systemrequirements'.
+class SystemRequirementsElementHandler : public ElementHandler {
+ public:
+  static ElementHandler* Create() {
+    return new SystemRequirementsElementHandler;
+  }
+
+ private:
+  virtual HRESULT Parse(IXMLDOMNode* node, response::Response* response) {
+    response::SystemRequirements& sys_req = response->sys_req;
+
+    HRESULT hr = ReadStringAttribute(node,
+                                     xml::attribute::kPlatform,
+                                     &sys_req.platform);
+    if (FAILED(hr)) {
+      return hr;
+    }
+
+    hr = ReadStringAttribute(node,
+                             xml::attribute::kArch,
+                             &sys_req.arch);
+    if (FAILED(hr)) {
+      return hr;
+    }
+
+    return ReadStringAttribute(node,
+                               xml::attribute::kMinOSVersion,
+                               &sys_req.min_os_version);
+  }
+};
+
 namespace v2 {
 
 namespace element {
@@ -743,6 +775,8 @@ void XmlParser::InitializeElementHandlers() {
     {xml::element::kApp, &AppElementHandler::Create},
     {xml::element::kData, &DataElementHandler::Create},
     {xml::element::kDayStart, &DayStartElementHandler::Create},
+    {xml::element::kSystemRequirements,
+        &SystemRequirementsElementHandler::Create},
     {xml::element::kEvent, &EventElementHandler::Create},
     {xml::element::kManifest, &ManifestElementHandler::Create},
     {xml::element::kPackage, &PackageElementHandler::Create},
@@ -1624,8 +1658,9 @@ HRESULT XmlParser::CreateElementNode(const TCHAR* name,
   // size explosion where the namespace uri gets automatically added to every
   // element by msxml.
   CString namespace_qualified_name;
-  namespace_qualified_name.Format(kXmlNamespace ? _T("o:%s") : _T("%s"),
-                                  name);
+  SafeCStringFormat(&namespace_qualified_name,
+                    kXmlNamespace ? _T("o:%s") : _T("%s"),
+                    name);
   ASSERT1(document_);
   HRESULT hr = CreateXMLNode(document_,
                              NODE_ELEMENT,

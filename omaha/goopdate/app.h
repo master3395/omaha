@@ -30,6 +30,7 @@
 #include "goopdate/omaha3_idl.h"
 #include "omaha/base/browser_utils.h"
 #include "omaha/base/constants.h"
+#include "omaha/common/app_registry_utils.h"
 #include "omaha/common/const_goopdate.h"
 #include "omaha/common/ping_event.h"
 #include "omaha/common/protocol_definition.h"
@@ -54,12 +55,6 @@ struct ErrorContext {
   int     extra_code1;
 
   // Add more extra codes here as needed.
-};
-
-struct Cohort {
-  CString cohort;  // Opaque string.
-  CString hint;    // Server may use to move the app to a new cohort.
-  CString name;    // Human-readable interpretation of the cohort.
 };
 
 class DownloadManagerInterface;
@@ -410,8 +405,6 @@ class App : public ModelObject {
 
   int GetTimeDifferenceMs(TimeMetricType time_start_metric_type,
                           TimeMetricType time_end_metric_type) const;
-
-  CString GetExperimentLabelsHelper(bool include_timestamps) const;
 
   scoped_ptr<fsm::AppState> app_state_;
 
